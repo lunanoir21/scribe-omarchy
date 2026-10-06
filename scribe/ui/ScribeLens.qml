@@ -34,6 +34,8 @@ PanelWindow {
     property string choiceCmd: ""
     property string terminalCode: ""
     property bool settingsOpen: false
+    property var tr: null                // ScribeTranslator: translation, dictionary, smart actions
+    signal translateRequested(string text)
     signal chooseLang(string code)
     signal cancelChoice()
     signal copyCommand()
@@ -112,6 +114,40 @@ PanelWindow {
     }
 
     function selectAll() { setSel(0, words.length - 1); }
+
+    // dev only (reached through ScribeHost's flag-file guarded IPC helpers)
+    function devEnableCard() { settingsOpen = true; settingsPanel.showEnableCard(); }
+    function devHoverWord(i) {
+        if (!tr || i < 0 || i >= words.length) return;
+        var w = words[i];
+        tr.setHover(tr.trimNonLetters(w.t), "orig", Qt.rect(rect.x + w.x, rect.y + w.y, w.w, w.h));
+    }
+
+    // the word under the pointer opens the dictionary bubble (not while dragging a selection, and
+    // not while the translation is painted over the text)
+    onHoverIdxChanged: {
+        if (!tr || !tr.cfg.dictionary || phase !== "result") return;
+        if (hoverIdx >= 0 && hoverIdx < words.length && !wordDrag && !tview.coverShown) {
+            var w = words[hoverIdx];
+            tr.setHover(tr.trimNonLetters(w.t), "orig", Qt.rect(rect.x + w.x, rect.y + w.y, w.w, w.h));
+        } else {
+            tr.leaveWord();
+        }
+    }
+
+    // the Translate button under the region: reopen a closed translation, or ask for a new one
+    function openTranslation() {
+        if (!tr || !tr.enabled) return;
+        if (tr.status === "ready" && tr.hasTranslation) { tview.dismissed = false; return; }
+        translateSelection();
+    }
+
+    function translateSelection() {
+        if (words.length === 0 || !tr || !tr.enabled) return;
+        var lo = selLo >= 0 ? selLo : 0, hi = selLo >= 0 ? selHi : words.length - 1;
+        tview.dismissed = false;
+        translateRequested(tr.paragraphs(words, lo, hi));
+    }
 
     function textFor(lo, hi) {
         var out = "", prev = null;
@@ -407,12 +443,21 @@ PanelWindow {
                     label: ScribeStrings.s.selectAll
                     onActivated: win.selectAll()
                 }
+
+                Rectangle { width: 1; height: 20; y: 6; color: "#3d3d3d"; visible: !win.copied && win.tr !== null && win.tr.enabled }
+
+                ScribeBarButton {
+                    visible: !win.copied && win.tr !== null && win.tr.enabled
+                    label: ScribeStrings.s.translate
+                    onActivated: win.translateSelection()
+                }
             }
         }
 
         // status hint under the region (no card)
         Rectangle {
-            visible: win.phase === "result" && win.hint !== "" && !bar.visible
+            id: hintPill
+            visible: win.phase === "result" && win.hint !== "" && !bar.visible && !tview.cardShown && !tview.dockShown && !tview.stateShown
             x: Math.max(12, Math.min(win.rect.x, parent.width - width - 12))
             y: win.rect.y + win.rect.height + 12 + height > parent.height ? Math.max(12, win.rect.y - height - 12) : win.rect.y + win.rect.height + 12
             height: 30
@@ -429,6 +474,45 @@ PanelWindow {
                 Rectangle { width: 1; height: 12; color: "#3d3d3d"; anchors.verticalCenter: parent.verticalCenter }
                 Text { text: "Esc"; font.family: ScribeTheme.mono; font.pixelSize: 11; color: ScribeTheme.dim }
             }
+        }
+
+        // Translate button: nothing is translated, and the model is not loaded, until it is pressed
+        Rectangle {
+            id: trPill
+            z: 12
+            visible: win.phase === "result" && win.tr !== null && win.tr.enabled && win.words.length > 0 && !bar.visible
+                     && (win.tr.status === "idle" || tview.dismissed)
+            height: 34
+            width: trBtn.width + 8
+            radius: 17
+            color: "#1b1b1b"
+            border.width: 1
+            border.color: "#3d3d3d"
+            x: hintPill.visible ? hintPill.x + hintPill.width + 8 : Math.max(12, Math.min(win.rect.x, parent.width - width - 12))
+            y: hintPill.visible ? hintPill.y - 2
+               : (win.rect.y + win.rect.height + 12 + height > parent.height ? Math.max(12, win.rect.y - height - 12) : win.rect.y + win.rect.height + 12)
+            ScribeBarButton {
+                id: trBtn
+                x: 4; y: 4
+                compact: true
+                label: ScribeStrings.s.translate
+                onActivated: win.openTranslation()
+            }
+        }
+
+        // ── translation: card or in-place text, smart actions, dictionary ──
+        ScribeTranslateView {
+            id: tview
+            z: 15
+            anchors.fill: parent
+            visible: win.phase === "result" && win.tr !== null
+            tr: win.tr
+            rect: win.rect
+            words: win.words
+            hintShown: hintPill.visible || trPill.visible
+            onCloseOverlay: win.cancelled()
+            onCopyText: t => win.copyText(t, 0)
+            onEntityCopied: { win.copied = true; if (win.closeAfterCopy) closeTimer.restart(); }
         }
 
         // ── settings: gear + panel ───────────────────────
@@ -501,6 +585,8 @@ PanelWindow {
             Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
             Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack; easing.overshoot: 1.3 } }
 
+            tr: win.tr
+            maxHeight: parent.height - 100
             cfg: win.cfg
             installed: win.installed
             installing: win.installing
