@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
 done
 
 TMP=""
-# shellcheck disable=SC2329  # called by the trap below
+# shellcheck disable=SC2317,SC2329  # called by the trap below
 cleanup() { if [ -n "$TMP" ]; then rm -r -- "$TMP"; fi; }
 trap cleanup EXIT
 
@@ -69,5 +69,5 @@ while read -r f; do
 done < <(list_files)
 extra="$(cd "$HERE/scribe" && find . -type f | sed 's|^\./||' | sort | comm -13 <(list_files | sort) -)"
 if [ -n "$extra" ]; then echo "not in upstream: $extra" >&2; bad=1; fi
-[ "$bad" = 0 ] && echo "scribe/ matches upstream $(cat "$HERE/UPSTREAM_COMMIT" | cut -c1-12)"
+if [ "$bad" = 0 ]; then echo "scribe/ matches upstream $(cut -c1-12 "$HERE/UPSTREAM_COMMIT")"; fi
 exit "$bad"
