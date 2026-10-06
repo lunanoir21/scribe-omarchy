@@ -1,0 +1,8 @@
+singleton ScribeTheme 1.0 ScribeTheme.qml
+singleton ScribeStrings 1.0 ScribeStrings.qml
+
+ScribeHost 1.0 ScribeHost.qml
+ScribeLens 1.0 ScribeLens.qml
+ScribeBarButton 1.0 ScribeBarButton.qml
+ScribeSwitch 1.0 ScribeSwitch.qml
+ScribeSettings 1.0 ScribeSettings.qml
