@@ -1,0 +1,24 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Vendored copy matches the pinned upstream commit
+        run: bash scripts/sync.sh --check --upstream /nonexistent
+      - name: Wrapper tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Lint scripts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck -S style scripts/sync.sh scripts/bind.sh
