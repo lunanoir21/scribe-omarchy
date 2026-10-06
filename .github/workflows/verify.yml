@@ -19,6 +19,6 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Lint scripts
         run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+          # pinned, so a newer runner image cannot change what the lint step reports
+          python3 -m pip install shellcheck-py==0.11.0.1
           shellcheck -S style scripts/sync.sh scripts/bind.sh
