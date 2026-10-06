@@ -155,8 +155,15 @@ Scope {
         readProc.running = true;
     }
 
+    // The text goes to wl-copy through its stdin and never through a command line: process
+    // arguments can be read by other local users (/proc/<pid>/cmdline), and this text is whatever
+    // was on the screen.
+    property string pendingCopy: ""
     function copy(text) {
-        copyProc.command = ["sh", "-c", "printf %s \"$1\" | wl-copy", "sh", text];
+        if (text === "")
+            return;
+        pendingCopy = text;
+        copyProc.stdinEnabled = true;
         copyProc.running = true;
     }
 
@@ -269,7 +276,16 @@ Scope {
     }
 
     Process { id: cleanProc }
-    Process { id: copyProc }
+    Process {
+        id: copyProc
+        command: ["wl-copy"]
+        stdinEnabled: true
+        onStarted: {
+            write(host.pendingCopy);
+            host.pendingCopy = "";
+            stdinEnabled = false;        // closes stdin: wl-copy reads until EOF, then keeps the selection
+        }
+    }
 
     Process {
         id: grabProc
