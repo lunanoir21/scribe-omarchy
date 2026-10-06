@@ -14,8 +14,8 @@ words and press **Copy**, the way Google Lens does it. The original text stays u
 ![Words selected on the Hyprland Wikipedia article, with the Copy toolbar above the selection](preview.png)
 
 This repo is a thin wrapper. All behaviour lives upstream; the `scribe/` directory here is a
-vendored, pinned copy of the running module (currently `v0.2.0`, commit
-`9695fac5df50c1b856dc7c05a7c1e01f511124fb`, written to `UPSTREAM_COMMIT`), and `Service.qml` is
+vendored, pinned copy of the running module (currently `v0.2.1`, commit
+`e8ff1aa07f3386ec802320d137d000a99c6fd6f9`, written to `UPSTREAM_COMMIT`), and `Service.qml` is
 what Omarchy's plugin loader needs to start it. Nothing is developed here.
 
 `manifest.json` declares `kinds: ["service"]` with `keepLoaded: true`, the same shape as Omarchy's
@@ -67,7 +67,8 @@ interface language (English or Turkish; `auto` follows `$LANG`).
   to run without that directory instead of falling back to `/tmp`.
 - **Writes** its settings to `~/.config/scribe/settings.json` (mode 600, six known keys), the
   language packs you choose to download to `~/.local/share/scribe/tessdata/`, and text to the
-  clipboard through `wl-copy`. It never touches `~/.config/omarchy/shell.json` or any other
+  clipboard through `wl-copy`, which gets the text on its stdin only: screen text never appears on a
+  command line, where other local users could read it. It never touches `~/.config/omarchy/shell.json` or any other
   configuration, and nothing is written inside the plugin folder.
 - **Network:** only the language pack download, and only when you press **Download directly**: HTTPS
   to `github.com` / `raw.githubusercontent.com` (`tesseract-ocr/tessdata_fast`), redirects to other
