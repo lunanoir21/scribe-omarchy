@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.lunanoir21.scribe",
+  "name": "Scribe",
+  "version": "0.2.0",
+  "author": "lunanoir21",
+  "license": "MIT",
+  "description": "Select and copy text from anywhere on the screen, like Google Lens: drag a box around a video, image, PDF or terminal, then drag over the words and press Copy.",
+  "kinds": ["service"],
+  "keepLoaded": true,
+  "entryPoints": { "service": "Service.qml" }
+}
