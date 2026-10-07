@@ -14,6 +14,25 @@ Rectangle {
     property string terminalCode: ""    // language whose command is running in a terminal right now
     property string pmName: ""          // e.g. "pacman"
     property string osName: ""          // e.g. "CachyOS"
+    property var tr: null               // ScribeTranslator (offline pack status and actions)
+    property real maxHeight: 700        // the card scrolls when it would be taller than the screen
+    property bool confirmEnable: false  // the "before you enable it" card is showing
+
+    // Shows the card and scrolls it into view, so its Enable and Cancel buttons are not below the fold.
+    function showEnableCard() {
+        confirmEnable = true;
+        scrollToCard.restart();
+    }
+
+    // the card has its height only after the layout ran, so scroll a moment later
+    Timer {
+        id: scrollToCard
+        interval: 80
+        onTriggered: {
+            var y = enableCard.mapToItem(col, 0, 0).y;
+            flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, y - 24));
+        }
+    }
 
     signal changeCfg(string key, var value)
     signal chooseLang(string code)
@@ -28,6 +47,42 @@ Rectangle {
     readonly property var catalog: codes.map(function (c) { return { code: c, name: ScribeStrings.s.langNames[c] }; })
     readonly property var active: (cfg.langs || "").split("+").filter(function (x) { return x !== ""; })
     readonly property var swatches: ["#8ab4f8", "#ffffff", "#81c995", "#fdd663", "#f28b82"]
+
+
+    // a row of choices, the picked one inverted
+    component Choice: Flow {
+        id: ch
+        property var options: []        // [{ v, t }]
+        property string current: ""
+        signal picked(string v)
+        width: parent ? parent.width : 300
+        spacing: 6
+        Repeater {
+            model: ch.options
+            delegate: Rectangle {
+                required property var modelData
+                readonly property bool sel: ch.current === modelData.v
+                height: 28
+                width: chTxt.implicitWidth + 28
+                radius: 14
+                color: sel ? ScribeTheme.text : (chMa.containsMouse ? "#222222" : "transparent")
+                border.width: 1
+                border.color: sel ? ScribeTheme.text : ScribeTheme.line
+                scale: chMa.pressed ? 0.95 : 1
+                Behavior on color { ColorAnimation { duration: 120 } }
+                Behavior on scale { NumberAnimation { duration: 80 } }
+                Text { id: chTxt; anchors.centerIn: parent; text: modelData.t; font.family: ScribeTheme.mono; font.pixelSize: 12; color: parent.sel ? ScribeTheme.ink : ScribeTheme.text }
+                MouseArea { id: chMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ch.picked(parent.modelData.v) }
+            }
+        }
+    }
+
+    readonly property var trLangCodes: ["tr", "en", "de", "fr", "es", "it", "pt", "ru", "nl", "pl", "ar", "ja", "ko", "zh"]
+    function trLangOptions(withAuto) {
+        var o = withAuto ? [{ v: "auto", t: ScribeStrings.s.tlNames.auto }] : [];
+        for (var i = 0; i < trLangCodes.length; i++) o.push({ v: trLangCodes[i], t: ScribeStrings.s.tlNames[trLangCodes[i]] });
+        return o;
+    }
 
     function isInstalled(code) { return installed.indexOf(code) >= 0; }
     function nameOf(code) {
@@ -48,7 +103,7 @@ Rectangle {
     }
 
     width: 400
-    implicitHeight: col.implicitHeight + 36
+    implicitHeight: Math.min(flick.contentHeight, maxHeight)
     radius: 12
     color: "#0c0c0c"
     border.width: 1
@@ -56,6 +111,14 @@ Rectangle {
     clip: true
 
     MouseArea { anchors.fill: parent }      // clicks on blank card areas must not reach the dismiss layer
+
+    Flickable {
+    id: flick
+    anchors.fill: parent
+    contentWidth: width
+    contentHeight: col.implicitHeight + 36
+    boundsBehavior: Flickable.StopAtBounds
+    clip: true
 
     Column {
         id: col
@@ -283,7 +346,8 @@ Rectangle {
             model: [
                 { key: "closeAfterCopy", label: ScribeStrings.s.closeAfterCopy },
                 { key: "autoCopy", label: ScribeStrings.s.autoCopy },
-                { key: "joinLines", label: ScribeStrings.s.joinLines }
+                { key: "joinLines", label: ScribeStrings.s.joinLines },
+                { key: "smartActions", label: ScribeStrings.s.smartActions }
             ]
             delegate: Item {
                 required property var modelData
@@ -294,6 +358,302 @@ Rectangle {
                     checked: !!panel.cfg[modelData.key]
                     onToggled: v => panel.changeCfg(modelData.key, v)
                 }
+            }
+        }
+
+        Rectangle { width: parent.width; height: 1; color: ScribeTheme.line }
+        Text { text: ScribeStrings.s.translation; font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.dim }
+
+        // master switch: nothing is downloaded, loaded or run for translation while it is off
+        Item {
+            width: col.width; height: 28
+            Text { anchors.verticalCenter: parent.verticalCenter; text: ScribeStrings.s.enableTranslate; font.family: ScribeTheme.mono; font.pixelSize: 13; font.weight: Font.DemiBold; color: ScribeTheme.text }
+            ScribeSwitch {
+                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                checked: !!panel.cfg.translate
+                onToggled: v => { if (v) panel.showEnableCard(); else { panel.confirmEnable = false; panel.changeCfg("translate", false); } }
+            }
+        }
+
+        // asked before the first activation: what it downloads, sends and keeps in memory
+        Rectangle {
+            id: enableCard
+            visible: panel.confirmEnable && !panel.cfg.translate
+            width: parent.width
+            height: enCol.implicitHeight + 24
+            radius: 8
+            color: "transparent"
+            border.width: 1
+            border.color: ScribeTheme.text
+            Column {
+                id: enCol
+                x: 12; y: 12
+                width: parent.width - 24
+                spacing: 8
+                Row {
+                    spacing: 8
+                    Rectangle {
+                        width: 18; height: 18; radius: 9
+                        color: ScribeTheme.text
+                        anchors.verticalCenter: parent.verticalCenter
+                        Text { anchors.centerIn: parent; text: "!"; font.family: ScribeTheme.mono; font.pixelSize: 12; font.weight: Font.Bold; color: ScribeTheme.ink }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: ScribeStrings.s.enableWarnTitle
+                        font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.text
+                    }
+                }
+                Repeater {
+                    model: [ScribeStrings.s.enableNet, ScribeStrings.s.enableMem, ScribeStrings.s.enableDisk, ScribeStrings.s.enableAcc, ScribeStrings.s.enableOff]
+                    delegate: Text {
+                        required property string modelData
+                        width: enCol.width; wrapMode: Text.Wrap; lineHeight: 1.4
+                        text: modelData
+                        font.family: ScribeTheme.mono; font.pixelSize: 11; color: "#cfcfcf"
+                    }
+                }
+                Row {
+                    spacing: 8
+                    ScribeBarButton { compact: true; label: ScribeStrings.s.enableConfirm; onActivated: { panel.confirmEnable = false; panel.changeCfg("translate", true); } }
+                    ScribeBarButton { compact: true; label: ScribeStrings.s.giveUp; onActivated: panel.confirmEnable = false }
+                }
+            }
+        }
+
+        Column {
+            id: transBody
+            visible: !!panel.cfg.translate
+            width: parent.width
+            spacing: 14
+        Item {
+                width: transBody.width; height: 28
+                Text { anchors.verticalCenter: parent.verticalCenter; text: ScribeStrings.s.autoTranslate; font.family: ScribeTheme.mono; font.pixelSize: 13; color: ScribeTheme.text }
+                ScribeSwitch {
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    checked: !!panel.cfg.autoTranslate
+                    onToggled: v => panel.changeCfg("autoTranslate", v)
+                }
+            }
+
+            Text { text: ScribeStrings.s.resultView; font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.dim }
+            Choice {
+                options: [{ v: "card", t: ScribeStrings.s.viewCard }, { v: "inplace", t: ScribeStrings.s.viewInplace }]
+                current: panel.cfg.tView || "card"
+                onPicked: v => panel.changeCfg("tView", v)
+            }
+
+            Text { text: ScribeStrings.s.engine; font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.dim }
+            Choice {
+                options: [{ v: "offline", t: ScribeStrings.s.engineOffline }, { v: "online", t: ScribeStrings.s.engineOnline }]
+                current: panel.cfg.tEngine || "offline"
+                onPicked: v => panel.changeCfg("tEngine", v)
+            }
+
+            Text { text: ScribeStrings.s.targetLang; font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.dim }
+            Choice {
+                options: panel.trLangOptions(false)
+                current: panel.cfg.tTarget || "tr"
+                onPicked: v => panel.changeCfg("tTarget", v)
+            }
+
+            Item {
+                width: transBody.width; height: 28
+                Text { anchors.verticalCenter: parent.verticalCenter; text: ScribeStrings.s.allowOnline; font.family: ScribeTheme.mono; font.pixelSize: 13; color: ScribeTheme.text }
+                ScribeSwitch {
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    checked: !!panel.cfg.tOnline
+                    onToggled: v => panel.changeCfg("tOnline", v)
+                }
+            }
+
+            Column {
+                width: parent.width
+                spacing: 4
+                Text { text: ScribeStrings.s.onlineEmail; font.family: ScribeTheme.mono; font.pixelSize: 12; color: ScribeTheme.text }
+                Rectangle {
+                    width: parent.width; height: 30; radius: 6
+                    color: "#080808"; border.width: 1; border.color: mailInput.activeFocus ? ScribeTheme.lineStrong : ScribeTheme.line
+                    TextInput {
+                        id: mailInput
+                        anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
+                        verticalAlignment: TextInput.AlignVCenter
+                        clip: true
+                        font.family: ScribeTheme.mono; font.pixelSize: 12; color: ScribeTheme.text
+                        selectionColor: "#5a5a5a"
+                        text: panel.cfg.tEmail || ""
+                        onEditingFinished: if (text !== (panel.cfg.tEmail || "")) panel.changeCfg("tEmail", text.trim())
+                    }
+                }
+                Text { width: parent.width; wrapMode: Text.Wrap; text: ScribeStrings.s.onlineEmailHint; font.family: ScribeTheme.mono; font.pixelSize: 10; color: ScribeTheme.faint }
+            }
+
+            Rectangle { width: parent.width; height: 1; color: ScribeTheme.line }
+            Text { text: ScribeStrings.s.features; font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.dim }
+
+            Repeater {
+                model: [
+                    { key: "dictionary", label: ScribeStrings.s.dictionary },
+                    { key: "editable", label: ScribeStrings.s.editable }
+                ]
+                delegate: Item {
+                    required property var modelData
+                    width: transBody.width; height: 28
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; font.family: ScribeTheme.mono; font.pixelSize: 13; color: ScribeTheme.text }
+                    ScribeSwitch {
+                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                        checked: !!panel.cfg[modelData.key]
+                        onToggled: v => panel.changeCfg(modelData.key, v)
+                    }
+                }
+            }
+
+            Rectangle { width: parent.width; height: 1; color: ScribeTheme.line }
+            Text { text: ScribeStrings.s.offlineTitle; font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.dim }
+
+            Text {
+                width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.4
+                text: ScribeStrings.s.offlineInfo
+                font.family: ScribeTheme.mono; font.pixelSize: 11; color: ScribeTheme.faint
+            }
+
+            Text {
+                width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.4
+                text: ScribeStrings.s.offlineCaveat
+                font.family: ScribeTheme.mono; font.pixelSize: 11; color: "#cfcfcf"
+            }
+
+            Rectangle {
+                width: parent.width
+                height: warnCol.implicitHeight + 24
+                radius: 8
+                color: "transparent"
+                border.width: 1
+                border.color: ScribeTheme.lineStrong
+                Column {
+                    id: warnCol
+                    x: 12; y: 12
+                    width: parent.width - 24
+                    spacing: 6
+                    Row {
+                        spacing: 8
+                        Rectangle {
+                            width: 18; height: 18; radius: 9
+                            color: ScribeTheme.text
+                            anchors.verticalCenter: parent.verticalCenter
+                            Text { anchors.centerIn: parent; text: "!"; font.family: ScribeTheme.mono; font.pixelSize: 12; font.weight: Font.Bold; color: ScribeTheme.ink }
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: ScribeStrings.s.memWarnTitle
+                            font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.text
+                        }
+                    }
+                    Text {
+                        width: parent.width; wrapMode: Text.Wrap; lineHeight: 1.4
+                        text: ScribeStrings.s.memWarn
+                        font.family: ScribeTheme.mono; font.pixelSize: 11; color: "#cfcfcf"
+                    }
+                    Text {
+                        width: parent.width; wrapMode: Text.Wrap
+                        visible: panel.tr !== null && panel.tr.off !== null && panel.tr.off.daemon && panel.tr.off.rss_mb !== null
+                        text: panel.tr && panel.tr.off && panel.tr.off.rss_mb !== null ? ScribeStrings.s.memNow(panel.tr.off.rss_mb) : ""
+                        font.family: ScribeTheme.mono; font.pixelSize: 11; font.weight: Font.DemiBold; color: ScribeTheme.text
+                    }
+                }
+            }
+
+            Rectangle {
+                visible: panel.tr !== null
+                width: parent.width
+                height: offCol.implicitHeight + 24
+                radius: 8
+                color: ScribeTheme.surface
+                border.width: 1; border.color: ScribeTheme.line
+                Column {
+                    id: offCol
+                    x: 12; y: 12
+                    width: parent.width - 24
+                    spacing: 8
+                    Text {
+                        text: !panel.tr || panel.tr.off === null ? ScribeStrings.s.offlineChecking
+                            : panel.tr.offlineReady ? ScribeStrings.s.offlineReady
+                            : panel.tr.offlinePartial ? ScribeStrings.s.offlinePartial : ScribeStrings.s.offlineMissing
+                        font.family: ScribeTheme.mono; font.pixelSize: 13; font.weight: Font.DemiBold; color: ScribeTheme.text
+                    }
+                    Text {
+                        width: parent.width; wrapMode: Text.Wrap
+                        visible: panel.tr !== null && panel.tr.off !== null && panel.tr.off.pairs.length > 0
+                        text: panel.tr && panel.tr.off
+                            ? panel.tr.off.pairs.map(function (p) { var a = p.split("-"); return ScribeStrings.s.tlNames[a[0]] + " → " + ScribeStrings.s.tlNames[a[1]]; }).join(", ")
+                              + "  ·  " + ScribeStrings.s.diskUse(panel.tr.off.size_mb)
+                              + "  ·  " + (panel.tr.off.daemon ? ScribeStrings.s.serviceUp : ScribeStrings.s.serviceIdle)
+                            : ""
+                        font.family: ScribeTheme.mono; font.pixelSize: 11; color: ScribeTheme.dim
+                    }
+                    Rectangle {
+                        width: parent.width; height: 4; radius: 2
+                        visible: panel.tr !== null && panel.tr.installing
+                        color: "#2b2b2b"
+                        Rectangle {
+                            height: parent.height; radius: 2
+                            width: parent.width * Math.max(0.02, (panel.tr ? panel.tr.installPct : 0) / 100)
+                            color: ScribeTheme.text
+                            Behavior on width { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                        }
+                    }
+                    Text {
+                        width: parent.width; wrapMode: Text.Wrap
+                        visible: panel.tr !== null && (panel.tr.installing || panel.tr.installError !== "")
+                        text: panel.tr ? (panel.tr.installError !== "" ? panel.tr.installError : panel.tr.installMsg) : ""
+                        font.family: ScribeTheme.mono; font.pixelSize: 11; color: ScribeTheme.text
+                    }
+                    Row {
+                        spacing: 8
+                        ScribeBarButton {
+                            compact: true
+                            enabled: panel.tr !== null && !panel.tr.installing
+                            opacity: enabled ? 1 : 0.4
+                            label: panel.tr && panel.tr.offlineReady ? ScribeStrings.s.reinstallOffline : ScribeStrings.s.installOffline
+                            onActivated: panel.tr.installOffline()
+                        }
+                        ScribeBarButton {
+                            compact: true
+                            visible: panel.tr !== null && panel.tr.off !== null && panel.tr.off.size_mb > 0
+                            enabled: panel.tr !== null && !panel.tr.installing
+                            opacity: enabled ? 1 : 0.4
+                            label: ScribeStrings.s.removeOffline
+                            onActivated: panel.tr.removeOffline()
+                        }
+                    }
+                }
+            }
+
+        }
+
+        Rectangle { width: parent.width; height: 1; color: ScribeTheme.line }
+        Text { text: ScribeStrings.s.scanAnim; font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.dim }
+        Choice {
+            options: ["line", "rows", "shine", "pixels", "ring", "focus"].map(function (k) { return { v: k, t: ScribeStrings.s.scanNames[k] }; })
+            current: panel.cfg.scanAnim || "line"
+            onPicked: v => panel.changeCfg("scanAnim", v)
+        }
+        Rectangle {
+            width: parent.width; height: 76; radius: 6
+            color: "#161616"; border.width: 1; border.color: ScribeTheme.line
+            clip: true
+            Column {
+                x: 14; y: 12; spacing: 6
+                Repeater {
+                    model: [150, 190, 120]
+                    delegate: Rectangle { required property int modelData; width: modelData; height: 10; radius: 2; color: "#ffffff"; opacity: 0.22 }
+                }
+            }
+            ScribeScanFx {
+                anchors.fill: parent
+                kind: panel.cfg.scanAnim || "line"
+                accent: panel.cfg.highlight || "#8ab4f8"
+                running: panel.visible && panel.opacity > 0.5
             }
         }
 
@@ -343,5 +703,6 @@ Rectangle {
                 }
             }
         }
+    }
     }
 }

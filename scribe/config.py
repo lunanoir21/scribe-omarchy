@@ -24,7 +24,26 @@ DEFAULTS = {
     "minConfidence": 60,
     "highlight": "#8ab4f8",
     "ui": "auto",
+    "scanAnim": "line",         # line | rows | shine | pixels | ring | focus
+    # translation (translate.py). Off until the user switches it on in the settings panel: nothing
+    # is downloaded, loaded or run for translation while this is false.
+    "translate": False,
+    "autoTranslate": False,     # off: the model is only loaded when the Translate button is pressed
+    "tView": "card",            # card | inplace
+    "tEngine": "offline",       # offline | online
+    "tTarget": "tr",
+    "tSource": "auto",
+    "tOnline": False,           # standing permission to send text to the online service
+    "tEmail": "",               # optional: raises the online service's daily quota
+    "smartActions": True,       # links, e-mail, phone and IBAN become buttons
+    "dictionary": True,         # hover a word for its meaning
+    "editable": True,           # the read text can be corrected before translating
 }
+SCAN_ANIMS = ("line", "rows", "shine", "pixels", "ring", "focus")
+TRANSLATE_LANGS = (
+    "tr", "en", "de", "fr", "es", "it", "pt", "ru", "nl", "pl", "ar", "ja", "ko", "zh",
+)
+EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,128}$")
 LANGS_RE = re.compile(r"^[a-z]{2,3}(_[a-z]{2,8})?(\+[a-z]{2,3}(_[a-z]{2,8})?){0,7}$")
 COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 MAX_FILE_BYTES = 16 * 1024
@@ -54,6 +73,18 @@ def clean(raw):
             ok = isinstance(value, str) and COLOR_RE.match(value)
         elif key == "ui":
             ok = value in ("auto", "tr", "en")
+        elif key == "scanAnim":
+            ok = value in SCAN_ANIMS
+        elif key == "tView":
+            ok = value in ("card", "inplace")
+        elif key == "tEngine":
+            ok = value in ("offline", "online")
+        elif key == "tTarget":
+            ok = value in TRANSLATE_LANGS
+        elif key == "tSource":
+            ok = value == "auto" or value in TRANSLATE_LANGS
+        elif key == "tEmail":
+            ok = isinstance(value, str) and (value == "" or bool(EMAIL_RE.match(value)))
         elif key == "minConfidence":
             ok = isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 100
         else:

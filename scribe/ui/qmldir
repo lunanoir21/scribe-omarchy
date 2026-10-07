@@ -5,4 +5,7 @@ ScribeHost 1.0 ScribeHost.qml
 ScribeLens 1.0 ScribeLens.qml
 ScribeBarButton 1.0 ScribeBarButton.qml
 ScribeSwitch 1.0 ScribeSwitch.qml
+ScribeScanFx 1.0 ScribeScanFx.qml
 ScribeSettings 1.0 ScribeSettings.qml
+ScribeTranslator 1.0 ScribeTranslator.qml
+ScribeTranslateView 1.0 ScribeTranslateView.qml

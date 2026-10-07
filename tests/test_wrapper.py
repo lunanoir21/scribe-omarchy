@@ -93,6 +93,9 @@ class VendoredCopyTests(unittest.TestCase):
         self.assertIn("scribe.sh", names)
         self.assertIn("ui/ScribeHost.qml", names)
         self.assertIn("ui/qmldir", names)
+        self.assertIn("translate.py", names)
+        self.assertIn("ui/ScribeTranslator.qml", names)
+        self.assertIn("ui/ScribeTranslateView.qml", names)
         for forbidden in ("settings.json", "install.sh"):
             self.assertNotIn(forbidden, names)
 

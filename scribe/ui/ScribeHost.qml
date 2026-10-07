@@ -16,7 +16,17 @@ Scope {
     // idle -> capturing -> selecting -> reading -> result
     property string phase: "idle"
     property var cfg: ({ langs: "tur+eng", autoCopy: false, joinLines: true, minConfidence: 60,
-                         highlight: "#8ab4f8", closeAfterCopy: true })
+                         highlight: "#8ab4f8", closeAfterCopy: true,
+                         translate: false, autoTranslate: false, tView: "card", tEngine: "offline", tTarget: "tr", tSource: "auto",
+                         tOnline: false, tEmail: "", smartActions: true, dictionary: true, editable: true })
+
+    ScribeTranslator {
+        id: translator
+        cfg: host.cfg
+        baseDir: host.baseDir
+        onCopyRequested: t => host.copy(t)
+        onCfgRequested: (k, v) => host.setCfg(k, v)
+    }
 
     property var targetScreen: null
     property string shotPath: ""
@@ -47,6 +57,7 @@ Scope {
     function reset() {
         phase = "idle";
         words = [];
+        translator.reset();
         choiceCode = "";                 // a reopened overlay starts with a clean settings panel
         choiceCmd = "";
         installMsg = "";
@@ -208,6 +219,11 @@ Scope {
 
         function devopen(): void { host.devRun(function () { if (lensLoader.item) lensLoader.item.settingsOpen = true; }); }
         function devchoose(code: string): void { host.devRun(function () { host.chooseLang(code); }); }
+        // documentation screenshots: the card shown before translation is enabled, a hovered word,
+        // and starting the translation without a click
+        function devenable(): void { host.devRun(function () { if (lensLoader.item) lensLoader.item.devEnableCard(); }); }
+        function devword(i: int): void { host.devRun(function () { if (lensLoader.item) lensLoader.item.devHoverWord(i); }); }
+        function devtranslate(): void { host.devRun(function () { translator.start(); }); }
         function devclear(): void { host.devShot = ""; host.devDrag = null; host.testRect = null; host.devSel = ""; }
         function devdrag(x: real, y: real, w: real, h: real): void {
             host.devRun(function () { host.devDrag = { x: x, y: y, w: w, h: h }; });
@@ -350,6 +366,11 @@ Scope {
                 else
                     host.resultStatus = "ok";
                 host.phase = "result";
+                // text that was read is translated at the same time it can be copied
+                if (out.length > 0 && err !== "nolang") {
+                    translator.prepare(translator.paragraphs(out, 0, out.length - 1));
+                    if (host.cfg.autoTranslate) translator.start();
+                }
             }
         }
         onExited: code => {
@@ -439,7 +460,9 @@ Scope {
             onCopyCommand: { host.copy(host.choiceCmd); host.installMsg = ScribeStrings.s.commandCopied; }
             onRunTerminal: code => host.runTerminal(code)
             onInstallLang: code => host.installLang(code)
-            onSettingsOpened: host.refreshLangs()
+            onSettingsOpened: { host.refreshLangs(); translator.refreshStatus(); }
+            tr: translator
+            onTranslateRequested: text => translator.start(text)
             rect: host.selRect
             onCancelled: host.reset()
             onCopyText: (t, n) => host.copy(t)

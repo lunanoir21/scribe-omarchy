@@ -34,6 +34,20 @@ PanelWindow {
     property string choiceCmd: ""
     property string terminalCode: ""
     property bool settingsOpen: false
+    // picking a scan animation in the settings replays it over the region on screen for a moment
+    property bool previewScan: false
+    property string lastScanAnim: ""
+    onCfgChanged: {
+        var a = (cfg && cfg.scanAnim) || "line";
+        if (lastScanAnim !== "" && a !== lastScanAnim && phase === "result" && settingsOpen) {
+            previewScan = true;
+            previewScanTimer.restart();
+        }
+        lastScanAnim = a;
+    }
+    Timer { id: previewScanTimer; interval: 2600; onTriggered: win.previewScan = false }
+    property var tr: null                // ScribeTranslator: translation, dictionary, smart actions
+    signal translateRequested(string text)
     signal chooseLang(string code)
     signal cancelChoice()
     signal copyCommand()
@@ -111,7 +125,59 @@ PanelWindow {
         }
     }
 
+    // one box per text line, for the brief "text found" flash
+    readonly property var lineBoxes: {
+        var out = [], cur = null;
+        for (var i = 0; i < words.length; i++) {
+            var w = words[i];
+            if (cur && cur.line === w.line) {
+                cur.r = Math.max(cur.r, w.x + w.w);
+                cur.t = Math.min(cur.t, w.y);
+                cur.b = Math.max(cur.b, w.y + w.h);
+            } else {
+                if (cur) out.push(cur);
+                cur = { line: w.line, l: w.x, t: w.y, r: w.x + w.w, b: w.y + w.h };
+            }
+        }
+        if (cur) out.push(cur);
+        return out;
+    }
+
     function selectAll() { setSel(0, words.length - 1); }
+
+    // dev only (reached through ScribeHost's flag-file guarded IPC helpers)
+    function devEnableCard() { settingsOpen = true; settingsPanel.showEnableCard(); }
+    function devHoverWord(i) {
+        if (!tr || i < 0 || i >= words.length) return;
+        var w = words[i];
+        tr.setHover(tr.trimNonLetters(w.t), "orig", Qt.rect(rect.x + w.x, rect.y + w.y, w.w, w.h));
+    }
+
+    // the word under the pointer opens the dictionary bubble (not while dragging a selection, and
+    // not while the translation is painted over the text)
+    onHoverIdxChanged: {
+        if (!tr || !tr.cfg.dictionary || phase !== "result") return;
+        if (hoverIdx >= 0 && hoverIdx < words.length && !wordDrag && !tview.coverShown) {
+            var w = words[hoverIdx];
+            tr.setHover(tr.trimNonLetters(w.t), "orig", Qt.rect(rect.x + w.x, rect.y + w.y, w.w, w.h));
+        } else {
+            tr.leaveWord();
+        }
+    }
+
+    // the Translate button under the region: reopen a closed translation, or ask for a new one
+    function openTranslation() {
+        if (!tr || !tr.enabled) return;
+        if (tr.status === "ready" && tr.hasTranslation) { tview.dismissed = false; return; }
+        translateSelection();
+    }
+
+    function translateSelection() {
+        if (words.length === 0 || !tr || !tr.enabled) return;
+        var lo = selLo >= 0 ? selLo : 0, hi = selLo >= 0 ? selHi : words.length - 1;
+        tview.dismissed = false;
+        translateRequested(tr.paragraphs(words, lo, hi));
+    }
 
     function textFor(lo, hi) {
         var out = "", prev = null;
@@ -138,6 +204,11 @@ PanelWindow {
     }
 
     function hit(px, py) {
+        if (hoverIdx >= 0 && hoverIdx < words.length) {
+            var h = words[hoverIdx];
+            if (px >= h.x - 3 && px <= h.x + h.w + 3 && py >= h.y - 2 && py <= h.y + h.h + 2)
+                return hoverIdx;
+        }
         for (var i = 0; i < words.length; i++) {
             var w = words[i];
             if (px >= w.x - 3 && px <= w.x + w.w + 3 && py >= w.y - 2 && py <= w.y + w.h + 2)
@@ -220,6 +291,7 @@ PanelWindow {
             anchors.fill: parent
             source: win.shot !== "" ? "file://" + win.shot : ""
             fillMode: Image.Stretch
+            asynchronous: true
             cache: false
         }
 
@@ -279,23 +351,14 @@ PanelWindow {
             opacity: 0.85
         }
 
-        // reading: sweeping line
-        Item {
-            visible: win.phase === "reading"
+        // reading: the animation picked in the settings
+        ScribeScanFx {
+            z: 5
+            visible: win.phase === "reading" || win.previewScan
             x: win.rx; y: win.ry; width: win.rw; height: win.rh
-            clip: true
-            Rectangle { width: parent.width; height: 36; y: sweepLine.y - height; color: "#ffffff"; opacity: 0.10 }
-            Rectangle {
-                id: sweepLine
-                width: parent.width; height: 2
-                color: "#ffffff"
-                SequentialAnimation on y {
-                    running: win.phase === "reading"
-                    loops: Animation.Infinite
-                    NumberAnimation { from: 0; to: win.rh; duration: 800; easing.type: Easing.InOutQuad }
-                    PauseAnimation { duration: 100 }
-                }
-            }
+            kind: (win.cfg && win.cfg.scanAnim) || "line"
+            accent: win.highlight
+            running: win.phase === "reading" || win.previewScan
         }
         Rectangle {
             visible: win.phase === "reading"
@@ -323,11 +386,11 @@ PanelWindow {
                 id: flashLayer
                 opacity: 0
                 Repeater {
-                    model: win.phase === "result" ? win.words : []
+                    model: win.phase === "result" ? win.lineBoxes : []
                     delegate: Rectangle {
                         required property var modelData
-                        x: modelData.x - 2; y: modelData.y - 1
-                        width: modelData.w + 4; height: modelData.h + 2
+                        x: modelData.l - 2; y: modelData.t - 1
+                        width: modelData.r - modelData.l + 4; height: modelData.b - modelData.t + 2
                         radius: 3
                         color: Qt.rgba(win.highlight.r, win.highlight.g, win.highlight.b, 0.22)
                     }
@@ -407,12 +470,21 @@ PanelWindow {
                     label: ScribeStrings.s.selectAll
                     onActivated: win.selectAll()
                 }
+
+                Rectangle { width: 1; height: 20; y: 6; color: "#3d3d3d"; visible: !win.copied && win.tr !== null && win.tr.enabled }
+
+                ScribeBarButton {
+                    visible: !win.copied && win.tr !== null && win.tr.enabled
+                    label: ScribeStrings.s.translate
+                    onActivated: win.translateSelection()
+                }
             }
         }
 
         // status hint under the region (no card)
         Rectangle {
-            visible: win.phase === "result" && win.hint !== "" && !bar.visible
+            id: hintPill
+            visible: win.phase === "result" && win.hint !== "" && !bar.visible && !tview.cardShown && !tview.dockShown && !tview.stateShown
             x: Math.max(12, Math.min(win.rect.x, parent.width - width - 12))
             y: win.rect.y + win.rect.height + 12 + height > parent.height ? Math.max(12, win.rect.y - height - 12) : win.rect.y + win.rect.height + 12
             height: 30
@@ -429,6 +501,45 @@ PanelWindow {
                 Rectangle { width: 1; height: 12; color: "#3d3d3d"; anchors.verticalCenter: parent.verticalCenter }
                 Text { text: "Esc"; font.family: ScribeTheme.mono; font.pixelSize: 11; color: ScribeTheme.dim }
             }
+        }
+
+        // Translate button: nothing is translated, and the model is not loaded, until it is pressed
+        Rectangle {
+            id: trPill
+            z: 12
+            visible: win.phase === "result" && win.tr !== null && win.tr.enabled && win.words.length > 0 && !bar.visible
+                     && (win.tr.status === "idle" || tview.dismissed)
+            height: 34
+            width: trBtn.width + 8
+            radius: 17
+            color: "#1b1b1b"
+            border.width: 1
+            border.color: "#3d3d3d"
+            x: hintPill.visible ? hintPill.x + hintPill.width + 8 : Math.max(12, Math.min(win.rect.x, parent.width - width - 12))
+            y: hintPill.visible ? hintPill.y - 2
+               : (win.rect.y + win.rect.height + 12 + height > parent.height ? Math.max(12, win.rect.y - height - 12) : win.rect.y + win.rect.height + 12)
+            ScribeBarButton {
+                id: trBtn
+                x: 4; y: 4
+                compact: true
+                label: ScribeStrings.s.translate
+                onActivated: win.openTranslation()
+            }
+        }
+
+        // ── translation: card or in-place text, smart actions, dictionary ──
+        ScribeTranslateView {
+            id: tview
+            z: 15
+            anchors.fill: parent
+            visible: win.phase === "result" && win.tr !== null
+            tr: win.tr
+            rect: win.rect
+            words: win.words
+            hintShown: hintPill.visible || trPill.visible
+            onCloseOverlay: win.cancelled()
+            onCopyText: t => win.copyText(t, 0)
+            onEntityCopied: { win.copied = true; if (win.closeAfterCopy) closeTimer.restart(); }
         }
 
         // ── settings: gear + panel ───────────────────────
@@ -501,6 +612,8 @@ PanelWindow {
             Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
             Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack; easing.overshoot: 1.3 } }
 
+            tr: win.tr
+            maxHeight: parent.height - 100
             cfg: win.cfg
             installed: win.installed
             installing: win.installing
@@ -575,8 +688,11 @@ PanelWindow {
                 win.hoverIdx = win.hit(lx, ly);
                 if (win.wordDrag) {
                     var j = win.nearest(lx, ly);
-                    if (j >= 0)
-                        win.setSel(Math.min(win.anchorIdx, j), Math.max(win.anchorIdx, j));
+                    if (j >= 0) {
+                        var lo = Math.min(win.anchorIdx, j), hi = Math.max(win.anchorIdx, j);
+                        if (lo !== win.selLo || hi !== win.selHi)
+                            win.setSel(lo, hi);
+                    }
                 }
             }
             onReleased: mouse => { win.wordDrag = false; }

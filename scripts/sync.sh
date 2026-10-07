@@ -14,7 +14,7 @@ UPSTREAM="$HERE/../scribe"
 CHECK_ONLY=0
 REPO_URL="https://github.com/lunanoir21/scribe.git"
 # the files that make up the running module (not tests, docs or the installer)
-FILES=(scribe.sh ocr.py langs.py config.py ui/qmldir)
+FILES=(scribe.sh ocr.py langs.py config.py translate.py ui/qmldir)
 
 while [ $# -gt 0 ]; do
     case "$1" in
