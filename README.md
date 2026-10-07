@@ -11,13 +11,14 @@
 drag a box around any text on the screen (a video, an image, a PDF, a terminal), then drag over the
 words and press **Copy**, the way Google Lens does it. The original text stays untouched. Since 0.3.0 it can also
 **translate** what it read (off until you switch it on), shows a dictionary bubble when you hover a word,
-and turns links, e-mail addresses, phone numbers and IBANs into buttons.
+and turns links, e-mail addresses, phone numbers and IBANs into buttons. Since 0.4.0 you can pick
+the animation shown while it reads (settings > **Scan animation**).
 
 ![Words selected on the Hyprland Wikipedia article, with the Copy toolbar above the selection](preview.png)
 
 This repo is a thin wrapper. All behaviour lives upstream; the `scribe/` directory here is a
-vendored, pinned copy of the running module (currently `v0.3.0`, commit
-`e2285d374542aced3411abf1427b02a982fc711c`, written to `UPSTREAM_COMMIT`), and `Service.qml` is
+vendored, pinned copy of the running module (currently `v0.4.0`, commit
+`9cf1321bf05b170087f98f077da15ea8ab72a5c2`, written to `UPSTREAM_COMMIT`), and `Service.qml` is
 what Omarchy's plugin loader needs to start it. Nothing is developed here.
 
 `manifest.json` declares `kinds: ["service"]` with `keepLoaded: true`, the same shape as Omarchy's
