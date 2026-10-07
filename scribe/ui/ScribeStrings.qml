@@ -43,6 +43,8 @@ QtObject {
         autoCopy: "Okuyunca hepsini kopyala",
         joinLines: "Paragraf satırlarını birleştir",
         highlight: "VURGU RENGİ",
+        scanAnim: "TARAMA ANİMASYONU",
+        scanNames: { line: "Çizgi", rows: "Satır satır", shine: "Parıltı", pixels: "Piksel", ring: "Çevre", focus: "Odak" },
         interfaceLang: "ARAYÜZ DİLİ",
         auto: "Otomatik",
         // host
@@ -174,6 +176,8 @@ QtObject {
         autoCopy: "Copy everything after reading",
         joinLines: "Join the lines of a paragraph",
         highlight: "HIGHLIGHT COLOUR",
+        scanAnim: "SCAN ANIMATION",
+        scanNames: { line: "Line", rows: "Row by row", shine: "Shine", pixels: "Pixels", ring: "Outline", focus: "Focus" },
         interfaceLang: "INTERFACE LANGUAGE",
         auto: "Auto",
         missing: function (list) { return "Missing: " + list; },

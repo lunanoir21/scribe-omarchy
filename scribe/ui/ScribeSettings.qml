@@ -632,6 +632,32 @@ Rectangle {
         }
 
         Rectangle { width: parent.width; height: 1; color: ScribeTheme.line }
+        Text { text: ScribeStrings.s.scanAnim; font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.dim }
+        Choice {
+            options: ["line", "rows", "shine", "pixels", "ring", "focus"].map(function (k) { return { v: k, t: ScribeStrings.s.scanNames[k] }; })
+            current: panel.cfg.scanAnim || "line"
+            onPicked: v => panel.changeCfg("scanAnim", v)
+        }
+        Rectangle {
+            width: parent.width; height: 76; radius: 6
+            color: "#161616"; border.width: 1; border.color: ScribeTheme.line
+            clip: true
+            Column {
+                x: 14; y: 12; spacing: 6
+                Repeater {
+                    model: [150, 190, 120]
+                    delegate: Rectangle { required property int modelData; width: modelData; height: 10; radius: 2; color: "#ffffff"; opacity: 0.22 }
+                }
+            }
+            ScribeScanFx {
+                anchors.fill: parent
+                kind: panel.cfg.scanAnim || "line"
+                accent: panel.cfg.highlight || "#8ab4f8"
+                running: panel.visible && panel.opacity > 0.5
+            }
+        }
+
+        Rectangle { width: parent.width; height: 1; color: ScribeTheme.line }
         Text { text: ScribeStrings.s.highlight; font.family: ScribeTheme.mono; font.pixelSize: 10; font.letterSpacing: 1.4; font.weight: Font.DemiBold; color: ScribeTheme.dim }
 
         Row {

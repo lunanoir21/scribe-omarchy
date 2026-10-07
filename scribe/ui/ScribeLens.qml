@@ -34,6 +34,18 @@ PanelWindow {
     property string choiceCmd: ""
     property string terminalCode: ""
     property bool settingsOpen: false
+    // picking a scan animation in the settings replays it over the region on screen for a moment
+    property bool previewScan: false
+    property string lastScanAnim: ""
+    onCfgChanged: {
+        var a = (cfg && cfg.scanAnim) || "line";
+        if (lastScanAnim !== "" && a !== lastScanAnim && phase === "result" && settingsOpen) {
+            previewScan = true;
+            previewScanTimer.restart();
+        }
+        lastScanAnim = a;
+    }
+    Timer { id: previewScanTimer; interval: 2600; onTriggered: win.previewScan = false }
     property var tr: null                // ScribeTranslator: translation, dictionary, smart actions
     signal translateRequested(string text)
     signal chooseLang(string code)
@@ -113,6 +125,24 @@ PanelWindow {
         }
     }
 
+    // one box per text line, for the brief "text found" flash
+    readonly property var lineBoxes: {
+        var out = [], cur = null;
+        for (var i = 0; i < words.length; i++) {
+            var w = words[i];
+            if (cur && cur.line === w.line) {
+                cur.r = Math.max(cur.r, w.x + w.w);
+                cur.t = Math.min(cur.t, w.y);
+                cur.b = Math.max(cur.b, w.y + w.h);
+            } else {
+                if (cur) out.push(cur);
+                cur = { line: w.line, l: w.x, t: w.y, r: w.x + w.w, b: w.y + w.h };
+            }
+        }
+        if (cur) out.push(cur);
+        return out;
+    }
+
     function selectAll() { setSel(0, words.length - 1); }
 
     // dev only (reached through ScribeHost's flag-file guarded IPC helpers)
@@ -174,6 +204,11 @@ PanelWindow {
     }
 
     function hit(px, py) {
+        if (hoverIdx >= 0 && hoverIdx < words.length) {
+            var h = words[hoverIdx];
+            if (px >= h.x - 3 && px <= h.x + h.w + 3 && py >= h.y - 2 && py <= h.y + h.h + 2)
+                return hoverIdx;
+        }
         for (var i = 0; i < words.length; i++) {
             var w = words[i];
             if (px >= w.x - 3 && px <= w.x + w.w + 3 && py >= w.y - 2 && py <= w.y + w.h + 2)
@@ -256,6 +291,7 @@ PanelWindow {
             anchors.fill: parent
             source: win.shot !== "" ? "file://" + win.shot : ""
             fillMode: Image.Stretch
+            asynchronous: true
             cache: false
         }
 
@@ -315,23 +351,14 @@ PanelWindow {
             opacity: 0.85
         }
 
-        // reading: sweeping line
-        Item {
-            visible: win.phase === "reading"
+        // reading: the animation picked in the settings
+        ScribeScanFx {
+            z: 5
+            visible: win.phase === "reading" || win.previewScan
             x: win.rx; y: win.ry; width: win.rw; height: win.rh
-            clip: true
-            Rectangle { width: parent.width; height: 36; y: sweepLine.y - height; color: "#ffffff"; opacity: 0.10 }
-            Rectangle {
-                id: sweepLine
-                width: parent.width; height: 2
-                color: "#ffffff"
-                SequentialAnimation on y {
-                    running: win.phase === "reading"
-                    loops: Animation.Infinite
-                    NumberAnimation { from: 0; to: win.rh; duration: 800; easing.type: Easing.InOutQuad }
-                    PauseAnimation { duration: 100 }
-                }
-            }
+            kind: (win.cfg && win.cfg.scanAnim) || "line"
+            accent: win.highlight
+            running: win.phase === "reading" || win.previewScan
         }
         Rectangle {
             visible: win.phase === "reading"
@@ -359,11 +386,11 @@ PanelWindow {
                 id: flashLayer
                 opacity: 0
                 Repeater {
-                    model: win.phase === "result" ? win.words : []
+                    model: win.phase === "result" ? win.lineBoxes : []
                     delegate: Rectangle {
                         required property var modelData
-                        x: modelData.x - 2; y: modelData.y - 1
-                        width: modelData.w + 4; height: modelData.h + 2
+                        x: modelData.l - 2; y: modelData.t - 1
+                        width: modelData.r - modelData.l + 4; height: modelData.b - modelData.t + 2
                         radius: 3
                         color: Qt.rgba(win.highlight.r, win.highlight.g, win.highlight.b, 0.22)
                     }
@@ -661,8 +688,11 @@ PanelWindow {
                 win.hoverIdx = win.hit(lx, ly);
                 if (win.wordDrag) {
                     var j = win.nearest(lx, ly);
-                    if (j >= 0)
-                        win.setSel(Math.min(win.anchorIdx, j), Math.max(win.anchorIdx, j));
+                    if (j >= 0) {
+                        var lo = Math.min(win.anchorIdx, j), hi = Math.max(win.anchorIdx, j);
+                        if (lo !== win.selLo || hi !== win.selHi)
+                            win.setSel(lo, hi);
+                    }
                 }
             }
             onReleased: mouse => { win.wordDrag = false; }

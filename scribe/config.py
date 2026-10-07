@@ -24,6 +24,7 @@ DEFAULTS = {
     "minConfidence": 60,
     "highlight": "#8ab4f8",
     "ui": "auto",
+    "scanAnim": "line",         # line | rows | shine | pixels | ring | focus
     # translation (translate.py). Off until the user switches it on in the settings panel: nothing
     # is downloaded, loaded or run for translation while this is false.
     "translate": False,
@@ -38,6 +39,7 @@ DEFAULTS = {
     "dictionary": True,         # hover a word for its meaning
     "editable": True,           # the read text can be corrected before translating
 }
+SCAN_ANIMS = ("line", "rows", "shine", "pixels", "ring", "focus")
 TRANSLATE_LANGS = (
     "tr", "en", "de", "fr", "es", "it", "pt", "ru", "nl", "pl", "ar", "ja", "ko", "zh",
 )
@@ -71,6 +73,8 @@ def clean(raw):
             ok = isinstance(value, str) and COLOR_RE.match(value)
         elif key == "ui":
             ok = value in ("auto", "tr", "en")
+        elif key == "scanAnim":
+            ok = value in SCAN_ANIMS
         elif key == "tView":
             ok = value in ("card", "inplace")
         elif key == "tEngine":
