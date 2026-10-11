@@ -1,5 +1,9 @@
 # Scribe for Omarchy
 
+![built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-D97757)
+![AI-assisted](https://img.shields.io/badge/AI--assisted-yes-e6edf3)
+![directed by human](https://img.shields.io/badge/directed%20by-human-3d444d)
+
 > **This repo is only packaging.** The project itself lives at
 > **[lunanoir21/scribe](https://github.com/lunanoir21/scribe)**: source,
 > [changelog](https://github.com/lunanoir21/scribe/blob/main/CHANGELOG.md),
@@ -22,6 +26,9 @@ what Omarchy's plugin loader needs to start it. Nothing is developed here.
 built-in `background`, `lock` and `notifications` plugins. Scribe draws nothing until you press its
 key: the overlay is one full-screen layer window that exists only while it is open, so nothing needs
 a place in Omarchy's bar.
+
+> [!IMPORTANT]
+> **Built with AI.** This project was largely written with [Claude Code](https://claude.com/claude-code). The ideas, design decisions, testing and final review are mine.
 
 ## Install
 
